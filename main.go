@@ -118,7 +118,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 				hasResize = true
 			} else {
 				// اگر ابعاد خارج از محدوده مجاز باشد، خطایی نمایش داده می‌شود
-				http.Error(w, "Invalid resize dimensions. Allowed values: 426x240, 640x360, 854x480, 960x540, 1024x576, 1280x720, 1600x900, 1920x1080", http.StatusBadRequest)
+				http.Error(w, "Invalid resize dimensions", http.StatusBadRequest)
 				return
 			}
 		} else {
