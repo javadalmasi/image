@@ -64,6 +64,28 @@ func generateImageURLs(videoID string, hostIndex int) []string {
 	}
 }
 
+// تابع بررسی محدودیت ابعاد مجاز
+func isValidDimension(width, height int) bool {
+	// ابعاد مجاز
+	validDimensions := [][2]int{
+		{426, 240},
+		{640, 360},
+		{854, 480},
+		{960, 540},
+		{1024, 576},
+		{1280, 720},
+		{1600, 900},
+		{1920, 1080},
+	}
+	
+	for _, dim := range validDimensions {
+		if width == dim[0] && height == dim[1] {
+			return true
+		}
+	}
+	return false
+}
+
 func handleRequest(w http.ResponseWriter, r *http.Request) {
 	// استخراج Video ID
 	matches := videoIDRegex.FindStringSubmatch(r.URL.Path)
@@ -89,7 +111,8 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		var width, height int
 		n, err := fmt.Sscanf(resizeParam, "%d,%d", &width, &height)
 		if err == nil && n == 2 {
-			if width > 0 && height > 0 {
+			// بررسی محدودیت ابعاد مجاز
+			if isValidDimension(width, height) {
 				targetWidth = uint(width)
 				targetHeight = uint(height)
 				hasResize = true
