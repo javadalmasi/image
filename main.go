@@ -242,9 +242,8 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 
-				// تغییر اندازه تصویر در صورت نیاز با حفظ نسبت ابعاد
+				// تغییر اندازه تصویر در صورت نیاز با برش برای پر کردن ابعاد (Crop mode)
 				if hasResize {
-					// محاسبه نسبت ابعاد برای حفظ نسبت تصویر اصلی
 					imgBounds := img.Bounds()
 					imgWidth := float64(imgBounds.Dx())
 					imgHeight := float64(imgBounds.Dy())
@@ -252,33 +251,37 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 					targetWidthF := float64(targetWidth)
 					targetHeightF := float64(targetHeight)
 					
-					// محاسبه نسبت کوچک‌تر برای حفظ نسبت ابعاد
-					scale := math.Min(targetWidthF/imgWidth, targetHeightF/imgHeight)
+					// محاسبه نسبت بزرگ‌تر برای اطمینان از پر شدن کامل فضای مقصد
+					scale := math.Max(targetWidthF/imgWidth, targetHeightF/imgHeight)
 					
-					// ابعاد واقعی تصویر پس از تغییر اندازه
+					// ابعاد تصویر پس از تغییر اندازه برای پوشش دادن کامل فضای هدف
 					newWidth := uint(math.Round(imgWidth * scale))
 					newHeight := uint(math.Round(imgHeight * scale))
 					
-					// ابتدا تصویر را با حفظ نسبت ابعاد تغییر اندازه دهید
-					resizedImg := image.NewRGBA(image.Rect(0, 0, int(newWidth), int(newHeight)))
-					draw.CatmullRom.Scale(resizedImg, resizedImg.Bounds(), img, img.Bounds(), draw.Src, nil)
+					// ابتدا تصویر را تغییر اندازه دهید تا حداقل یک بعد آن با هدف مطابقت داشته باشد
+					scaledImg := image.NewRGBA(image.Rect(0, 0, int(newWidth), int(newHeight)))
+					draw.CatmullRom.Scale(scaledImg, scaledImg.Bounds(), img, img.Bounds(), draw.Src, nil)
 					
-					// اکنون تصویر با نسبت ابعاد درست تغییر اندازه یافته است
-					// اکنون آن را در یک تصویر نهایی با ابعاد هدف قرار دهید با مرکز قرار دادن
-					finalImg := image.NewRGBA(image.Rect(0, 0, int(targetWidth), int(targetHeight)))
+					// حالا برش بزنید تا دقیقاً ابعاد هدف را داشته باشد
+					// محاسبه مختصات برش برای مرکز قرار دادن
+					cropX := int(float64(newWidth-targetWidth) / 2)
+					cropY := int(float64(newHeight-targetHeight) / 2)
 					
-					// محاسبه موقعیت برای قرار دادن تصویر در مرکز
-					offsetX := int((float64(targetWidth) - float64(newWidth)) / 2)
-					offsetY := int((float64(targetHeight) - float64(newHeight)) / 2)
+					// اطمینان از اینکه مقادیر برش معتبر هستند
+					if cropX < 0 { cropX = 0 }
+					if cropY < 0 { cropY = 0 }
 					
-					// کپی تصویر تغییر یافته به موقعیت مرکزی
-					draw.Draw(finalImg, 
-						image.Rect(offsetX, offsetY, offsetX+int(newWidth), offsetY+int(newHeight)), 
-						resizedImg, 
-						image.Point{0, 0}, 
+					// ایجاد تصویر نهایی با ابعاد دقیق مورد نیاز
+					croppedImg := image.NewRGBA(image.Rect(0, 0, int(targetWidth), int(targetHeight)))
+					
+					// کپی بخش مورد نیاز از تصویر بزرگ شده
+					draw.Draw(croppedImg, 
+						croppedImg.Bounds(),
+						scaledImg,
+						image.Point{cropX, cropY},
 						draw.Src)
 					
-					img = finalImg
+					img = croppedImg
 				}
 
 				// تعیین فرمت خروجی و کیفیت
