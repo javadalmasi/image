@@ -116,17 +116,41 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 				targetWidth = uint(width)
 				targetHeight = uint(height)
 				hasResize = true
+			} else {
+				// اگر ابعاد خارج از محدوده مجاز باشد، خطایی نمایش داده می‌شود
+				http.Error(w, "Invalid resize dimensions. Allowed values: 426x240, 640x360, 854x480, 960x540, 1024x576, 1280x720, 1600x900, 1920x1080", http.StatusBadRequest)
+				return
 			}
+		} else {
+			// فرمت اشتباه
+			http.Error(w, "Invalid resize format. Expected format: ?resize=width,height", http.StatusBadRequest)
+			return
 		}
 	}
 
 	// پردازش پارامتر quality
 	if qualityParam != "" {
 		quality, err := strconv.Atoi(qualityParam)
-		if err == nil && quality >= 1 && quality <= 100 {
-			targetQuality = quality
-			hasQuality = true
+		if err != nil {
+			// اگر مقدار quality عدد نباشد، خطایی نمایش داده می‌شود
+			http.Error(w, "Quality parameter must be a number", http.StatusBadRequest)
+			return
 		}
+		if quality < 1 || quality > 100 {
+			http.Error(w, "Quality parameter must be between 1 and 100", http.StatusBadRequest)
+			return
+		}
+		// بررسی اینکه مقدار باید مضربی از 5 باشد و بزرگتر از 70 باشد
+		if quality%5 != 0 {
+			http.Error(w, "Quality parameter must be a multiple of 5", http.StatusBadRequest)
+			return
+		}
+		if quality <= 70 {
+			http.Error(w, "Quality parameter must be greater than 70", http.StatusBadRequest)
+			return
+		}
+		targetQuality = quality
+		hasQuality = true
 	}
 
 	// تلاش برای دریافت تصویر از هاست‌های مختلف
