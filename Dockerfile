@@ -25,8 +25,8 @@ RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
 # مرحله نهایی - استفاده از alpine برای پشتیبانی از CGO
 FROM alpine:latest
 
-# نصب CA certificates
-RUN apk --no-cache add ca-certificates
+# نصب CA certificates با غیرفعال کردن triggers برای جلوگیری از مشکلات ایمیولیشن
+RUN apk add --no-cache --no-scripts ca-certificates
 
 WORKDIR /root/
 
