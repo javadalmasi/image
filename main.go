@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/jpeg"
 	"log"
+	"math"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -164,9 +165,11 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Format parameter not accepted", http.StatusBadRequest)
 			return
 		}
+	} else {
+		// فرمت پیش‌فرض webp است
+		targetFormat = "webp"
+		hasFormat = true
 	}
-	// نکته: اگر فرمت مشخص نشده باشد، فرمت اصلی تصویر حفظ می‌شود
-	// این رفتار بهترین عملکرد را دارد زیرا پهنای باند را ذخیره می‌کند
 
 	// تلاش برای دریافت تصویر از هاست‌های مختلف
 	for hostIndex := 0; hostIndex < len(ytHosts); hostIndex++ {
@@ -239,13 +242,43 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 					continue
 				}
 
-				// تغییر اندازه تصویر در صورت نیاز
+				// تغییر اندازه تصویر در صورت نیاز با حفظ نسبت ابعاد
 				if hasResize {
-					// ایجاد یک تصویر جدید با ابعاد مورد نظر
-					m := image.NewRGBA(image.Rect(0, 0, int(targetWidth), int(targetHeight)))
-					// استفاده از الگوریتم CatmullRom برای تغییر اندازه
-					draw.CatmullRom.Scale(m, m.Bounds(), img, img.Bounds(), draw.Src, nil)
-					img = m
+					// محاسبه نسبت ابعاد برای حفظ نسبت تصویر اصلی
+					imgBounds := img.Bounds()
+					imgWidth := float64(imgBounds.Dx())
+					imgHeight := float64(imgBounds.Dy())
+					
+					targetWidthF := float64(targetWidth)
+					targetHeightF := float64(targetHeight)
+					
+					// محاسبه نسبت کوچک‌تر برای حفظ نسبت ابعاد
+					scale := math.Min(targetWidthF/imgWidth, targetHeightF/imgHeight)
+					
+					// ابعاد واقعی تصویر پس از تغییر اندازه
+					newWidth := uint(math.Round(imgWidth * scale))
+					newHeight := uint(math.Round(imgHeight * scale))
+					
+					// ابتدا تصویر را با حفظ نسبت ابعاد تغییر اندازه دهید
+					resizedImg := image.NewRGBA(image.Rect(0, 0, int(newWidth), int(newHeight)))
+					draw.CatmullRom.Scale(resizedImg, resizedImg.Bounds(), img, img.Bounds(), draw.Src, nil)
+					
+					// اکنون تصویر با نسبت ابعاد درست تغییر اندازه یافته است
+					// اکنون آن را در یک تصویر نهایی با ابعاد هدف قرار دهید با مرکز قرار دادن
+					finalImg := image.NewRGBA(image.Rect(0, 0, int(targetWidth), int(targetHeight)))
+					
+					// محاسبه موقعیت برای قرار دادن تصویر در مرکز
+					offsetX := int((float64(targetWidth) - float64(newWidth)) / 2)
+					offsetY := int((float64(targetHeight) - float64(newHeight)) / 2)
+					
+					// کپی تصویر تغییر یافته به موقعیت مرکزی
+					draw.Draw(finalImg, 
+						image.Rect(offsetX, offsetY, offsetX+int(newWidth), offsetY+int(newHeight)), 
+						resizedImg, 
+						image.Point{0, 0}, 
+						draw.Src)
+					
+					img = finalImg
 				}
 
 				// تعیین فرمت خروجی و کیفیت
