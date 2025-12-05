@@ -11,7 +11,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/chai2010/webp"
 	"golang.org/x/image/draw"
+	_ "golang.org/x/image/webp" // Import for WebP decoding support
 	"golang.org/x/net/http2"
 )
 
@@ -96,14 +98,17 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	videoID := matches[1]
 
-	// خواندن پارامترهای resize و quality از query string
+	// خواندن پارامترهای resize و quality و format از query string
 	resizeParam := r.URL.Query().Get("resize")
 	qualityParam := r.URL.Query().Get("quality")
+	formatParam := r.URL.Query().Get("format")
 
 	var targetWidth, targetHeight uint
 	var targetQuality int
+	var targetFormat string
 	hasResize := false
 	hasQuality := false
+	hasFormat := false
 
 	// پردازش پارامتر resize
 	if resizeParam != "" {
@@ -145,6 +150,27 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		hasQuality = true
 	}
 
+	// پردازش پارامتر format
+	if formatParam != "" {
+		// فرمت‌های webp و jpeg پشتیبانی می‌شوند (avif در آینده پیاده‌سازی خواهد شد)
+		if formatParam == "webp" {
+			targetFormat = formatParam
+			hasFormat = true
+		} else if formatParam == "jpeg" || formatParam == "jpg" {
+			// jpeg را نیز می‌پذیرد، اما مقدار داخل targetFormat همچنان jpeg خواهد بود
+			targetFormat = "jpeg"
+			hasFormat = true
+		} else if formatParam == "avif" {
+			// AVIF در حال حاضر پشتیبانی نمی‌شود و فقط برای نشان دادن که قرار است پیاده‌سازی شود اضافه شده است
+			// در آینده می‌توان یک کتابخانه سوم‌شخص مانند github.com/Kagami/go-avif اضافه کرد
+			http.Error(w, "Format parameter not accepted. AVIF support coming soon", http.StatusBadRequest)
+			return
+		} else {
+			http.Error(w, "Format parameter not accepted. Only webp and jpeg are supported", http.StatusBadRequest)
+			return
+		}
+	}
+
 	// تلاش برای دریافت تصویر از هاست‌های مختلف
 	for hostIndex := 0; hostIndex < len(ytHosts); hostIndex++ {
 		imageURLs := generateImageURLs(videoID, hostIndex)
@@ -156,18 +182,50 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 			}
 			
 			if resp.StatusCode == http.StatusOK {
-				// اگر نیازی به تغییر اندازه یا کیفیت نیست، تصویر اصلی را برگردان
+				// اگر نیازی به تغییر اندازه یا کیفیت نیست، اما فرمت درخواست داده شده است
 				if !hasResize && !hasQuality {
-					// تنظیم هدرهای بهینه
-					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-					w.Header().Set("Content-Type", "image/jpeg")
-					w.Header().Set("X-Content-Type-Options", "nosniff")
-					
-					// کپی مستقیم بدون بافر اضافی
-					w.WriteHeader(http.StatusOK)
-					_, _ = io.Copy(w, resp.Body)
-					resp.Body.Close()
-					return
+					// اگر فرمت خاصی درخواست شده باشد، تصویر را تغییر فرمت دهیم
+					if hasFormat && targetFormat == "webp" {
+						// خواندن تصویر از پاسخ
+						img, _, err := image.Decode(resp.Body)
+						resp.Body.Close()
+						if err != nil {
+							continue
+						}
+						
+						// تنظیم کیفیت پیش‌فرض برای WebP
+						webpQuality := float32(85)
+
+						// تنظیم هدرهای بهینه برای WebP
+						w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+						w.Header().Set("Content-Type", "image/webp")
+						w.Header().Set("X-Content-Type-Options", "nosniff")
+						
+						// کد کردن تصویر به WebP
+						w.WriteHeader(http.StatusOK)
+						encodeErr := webp.Encode(w, img, &webp.Options{Lossless: false, Quality: webpQuality})
+						if encodeErr != nil {
+							http.Error(w, "Error encoding image to WebP", http.StatusInternalServerError)
+							return
+						}
+						return
+					} else {
+						// تنظیم هدرهای بهینه برای JPEG یا فرمت پیش‌فرض
+						w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+						if hasFormat && targetFormat == "jpeg" {
+							w.Header().Set("Content-Type", "image/jpeg")
+						} else {
+							// فرمت پیش‌فرض
+							w.Header().Set("Content-Type", "image/jpeg")
+						}
+						w.Header().Set("X-Content-Type-Options", "nosniff")
+						
+						// کپی مستقیم بدون بافر اضافی
+						w.WriteHeader(http.StatusOK)
+						_, _ = io.Copy(w, resp.Body)
+						resp.Body.Close()
+						return
+					}
 				}
 
 				// خواندن تصویر برای پردازش
@@ -181,30 +239,55 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 				if hasResize {
 					// ایجاد یک تصویر جدید با ابعاد مورد نظر
 					m := image.NewRGBA(image.Rect(0, 0, int(targetWidth), int(targetHeight)))
-					// استفاده از الگوریتم Lanczos برای تغییر اندازه
+					// استفاده از الگوریتم CatmullRom برای تغییر اندازه
 					draw.CatmullRom.Scale(m, m.Bounds(), img, img.Bounds(), draw.Src, nil)
 					img = m
 				}
 
-				// تنظیم کیفیت تصویر
-				var opts *jpeg.Options
-				if hasQuality {
-					opts = &jpeg.Options{Quality: targetQuality}
-				} else {
-					opts = &jpeg.Options{Quality: 90} // کیفیت پیش‌فرض
-				}
+				// تعیین فرمت خروجی و کیفیت
+				if hasFormat && targetFormat == "webp" {
+					// تنظیم کیفیت برای WebP
+					var webpQuality float32
+					if hasQuality {
+						// استفاده از کیفیت JPEG (75, 85) به عنوان مقیاس WebP
+						webpQuality = float32(targetQuality)
+					} else {
+						webpQuality = 85 // کیفیت پیش‌فرض
+					}
 
-				// تنظیم هدرهای بهینه
-				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-				w.Header().Set("Content-Type", "image/jpeg")
-				w.Header().Set("X-Content-Type-Options", "nosniff")
-				
-				// کد کردن تصویر پردازش شده
-				w.WriteHeader(http.StatusOK)
-				err = jpeg.Encode(w, img, opts)
-				if err != nil {
-					http.Error(w, "Error encoding image", http.StatusInternalServerError)
-					return
+					// تنظیم هدرهای بهینه برای WebP
+					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+					w.Header().Set("Content-Type", "image/webp")
+					w.Header().Set("X-Content-Type-Options", "nosniff")
+					
+					// کد کردن تصویر پردازش شده به WebP
+					w.WriteHeader(http.StatusOK)
+					err := webp.Encode(w, img, &webp.Options{Lossless: false, Quality: webpQuality})
+					if err != nil {
+						http.Error(w, "Error encoding image to WebP", http.StatusInternalServerError)
+						return
+					}
+				} else {
+					// تنظیم کیفیت تصویر برای JPEG
+					var opts *jpeg.Options
+					if hasQuality {
+						opts = &jpeg.Options{Quality: targetQuality}
+					} else {
+						opts = &jpeg.Options{Quality: 90} // کیفیت پیش‌فرض
+					}
+
+					// تنظیم هدرهای بهینه برای JPEG
+					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+					w.Header().Set("Content-Type", "image/jpeg")
+					w.Header().Set("X-Content-Type-Options", "nosniff")
+					
+					// کد کردن تصویر پردازش شده به JPEG
+					w.WriteHeader(http.StatusOK)
+					err := jpeg.Encode(w, img, opts)
+					if err != nil {
+						http.Error(w, "Error encoding image to JPEG", http.StatusInternalServerError)
+						return
+					}
 				}
 				return
 			}
