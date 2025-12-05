@@ -164,11 +164,9 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Format parameter not accepted", http.StatusBadRequest)
 			return
 		}
-	} else {
-		// فرمت پیش‌فرض webp است
-		targetFormat = "webp"
-		hasFormat = true
 	}
+	// نکته: اگر فرمت مشخص نشده باشد، فرمت اصلی تصویر حفظ می‌شود
+	// این رفتار بهترین عملکرد را دارد زیرا پهنای باند را ذخیره می‌کند
 
 	// تلاش برای دریافت تصویر از هاست‌های مختلف
 	for hostIndex := 0; hostIndex < len(ytHosts); hostIndex++ {
@@ -181,9 +179,9 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 			}
 			
 			if resp.StatusCode == http.StatusOK {
-				// اگر نیازی به تغییر اندازه یا کیفیت نیست، اما فرمت درخواست داده شده است یا فرمت پیش‌فرض باید اعمال شود
+				// اگر نیازی به تغییر اندازه یا کیفیت نیست، اما فرمت درخواست داده شده است
 				if !hasResize && !hasQuality {
-					// اگر فرمت خاصی درخواست شده باشد یا فرمت پیش‌فرض (webp) باید اعمال شود، تصویر را تغییر فرمت دهیم
+					// اگر فرمت خاصی درخواست شده باشد، تصویر را تغییر فرمت دهیم
 					if hasFormat && targetFormat == "webp" {
 						// خواندن تصویر از پاسخ
 						img, _, err := image.Decode(resp.Body)
@@ -208,8 +206,20 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 							return
 						}
 						return
-					} else { // targetFormat == "jpeg"
+					} else if hasFormat && targetFormat == "jpeg" {
 						// تنظیم هدرهای بهینه برای JPEG
+						w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+						w.Header().Set("Content-Type", "image/jpeg")
+						w.Header().Set("X-Content-Type-Options", "nosniff")
+						
+						// کپی مستقیم بدون بافر اضافی
+						w.WriteHeader(http.StatusOK)
+						_, _ = io.Copy(w, resp.Body)
+						resp.Body.Close()
+						return
+					} else {
+						// فرمت مشخص نشده است، تصویر اصلی را برگردان
+						// تنظیم هدرهای بهینه برای فرمت اصلی
 						w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 						w.Header().Set("Content-Type", "image/jpeg")
 						w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -261,8 +271,30 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 						http.Error(w, "Error encoding image to WebP", http.StatusInternalServerError)
 						return
 					}
-				} else {
+				} else if hasFormat && targetFormat == "jpeg" {
 					// تنظیم کیفیت تصویر برای JPEG
+					var opts *jpeg.Options
+					if hasQuality {
+						opts = &jpeg.Options{Quality: targetQuality}
+					} else {
+						opts = &jpeg.Options{Quality: 90} // کیفیت پیش‌فرض
+					}
+
+					// تنظیم هدرهای بهینه برای JPEG
+					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+					w.Header().Set("Content-Type", "image/jpeg")
+					w.Header().Set("X-Content-Type-Options", "nosniff")
+					
+					// کد کردن تصویر پردازش شده به JPEG
+					w.WriteHeader(http.StatusOK)
+					err := jpeg.Encode(w, img, opts)
+					if err != nil {
+						http.Error(w, "Error encoding image to JPEG", http.StatusInternalServerError)
+						return
+					}
+				} else {
+					// فرمت مشخص نشده است، اما resize یا quality درخواست شده است
+					// پس از پردازش، تصویر را به JPEG کد می‌کنیم
 					var opts *jpeg.Options
 					if hasQuality {
 						opts = &jpeg.Options{Quality: targetQuality}
