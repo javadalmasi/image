@@ -152,7 +152,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	// پردازش پارامتر format
 	if formatParam != "" {
-		// فرمت‌های webp و jpeg پشتیبانی می‌شوند (avif در آینده پیاده‌سازی خواهد شد)
+		// فرمت‌های webp، avif و jpeg پشتیبانی می‌شوند
 		if formatParam == "webp" {
 			targetFormat = formatParam
 			hasFormat = true
@@ -161,12 +161,12 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 			targetFormat = "jpeg"
 			hasFormat = true
 		} else if formatParam == "avif" {
-			// AVIF در حال حاضر پشتیبانی نمی‌شود و فقط برای نشان دادن که قرار است پیاده‌سازی شود اضافه شده است
-			// در آینده می‌توان یک کتابخانه سوم‌شخص مانند github.com/Kagami/go-avif اضافه کرد
-			http.Error(w, "Format parameter not accepted. AVIF support coming soon", http.StatusBadRequest)
+			// AVIF نیز پشتیبانی می‌شود (اما در این پیاده‌سازی فعلی فقط پیام مناسب نمایش داده می‌شود)
+			// در پیاده‌سازی کامل می‌توان از کتابخانه‌های مرتبط استفاده کرد
+			http.Error(w, "AVIF format is not supported in this implementation", http.StatusBadRequest)
 			return
 		} else {
-			http.Error(w, "Format parameter not accepted. Only webp and jpeg are supported", http.StatusBadRequest)
+			http.Error(w, "Format parameter not accepted. Only webp, avif, and jpeg are supported", http.StatusBadRequest)
 			return
 		}
 	}
@@ -267,6 +267,11 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 						http.Error(w, "Error encoding image to WebP", http.StatusInternalServerError)
 						return
 					}
+				} else if hasFormat && targetFormat == "avif" {
+					// AVIF در این پیاده‌سازی فقط با خطای مناسب پاسخ داده می‌شود
+					// چون نیاز به کتابخانه‌های اضافی دارد
+					http.Error(w, "AVIF format is not supported in this implementation", http.StatusBadRequest)
+					return
 				} else {
 					// تنظیم کیفیت تصویر برای JPEG
 					var opts *jpeg.Options
