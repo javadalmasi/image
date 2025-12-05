@@ -138,7 +138,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		}
 		// بررسی اینکه مقدار باید 75 یا 85 باشد
 		if quality != 75 && quality != 85 {
-			http.Error(w, "Quality parameter مورد پذیرش نیست", http.StatusBadRequest)
+			http.Error(w, "Quality parameter not accepted", http.StatusBadRequest)
 			return
 		}
 		targetQuality = quality
