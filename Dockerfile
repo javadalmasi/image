@@ -16,8 +16,8 @@ COPY main.go ./
 # نصب ابزارهای لازم برای کامپایل CGO
 RUN apk add --no-cache gcc musl-dev
 
-# کامپایل با بهینه‌سازی‌های حداکثری
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build \
+# کامپایل با بهینه‌سازی‌های حداکثری - استفاده از معماری پیش‌فرض داکر
+RUN CGO_ENABLED=1 GOOS=linux go build \
     -ldflags="-w -s" \
     -a -installsuffix cgo \
     -o yt-thumbnail-proxy .
