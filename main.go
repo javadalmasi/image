@@ -152,7 +152,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	// پردازش پارامتر format
 	if formatParam != "" {
-		// فرمت‌های webp، avif و jpeg پشتیبانی می‌شوند
+		// فرمت‌های webp و jpeg پشتیبانی می‌شوند
 		if formatParam == "webp" {
 			targetFormat = formatParam
 			hasFormat = true
@@ -160,15 +160,14 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 			// jpeg را نیز می‌پذیرد، اما مقدار داخل targetFormat همچنان jpeg خواهد بود
 			targetFormat = "jpeg"
 			hasFormat = true
-		} else if formatParam == "avif" {
-			// AVIF نیز پشتیبانی می‌شود (اما در این پیاده‌سازی فعلی فقط پیام مناسب نمایش داده می‌شود)
-			// در پیاده‌سازی کامل می‌توان از کتابخانه‌های مرتبط استفاده کرد
-			http.Error(w, "AVIF format is not supported in this implementation", http.StatusBadRequest)
-			return
 		} else {
-			http.Error(w, "Format parameter not accepted. Only webp, avif, and jpeg are supported", http.StatusBadRequest)
+			http.Error(w, "Format parameter not accepted. Only webp and jpeg are supported", http.StatusBadRequest)
 			return
 		}
+	} else {
+		// فرمت پیش‌فرض webp است
+		targetFormat = "webp"
+		hasFormat = true
 	}
 
 	// تلاش برای دریافت تصویر از هاست‌های مختلف
@@ -182,9 +181,9 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 			}
 			
 			if resp.StatusCode == http.StatusOK {
-				// اگر نیازی به تغییر اندازه یا کیفیت نیست، اما فرمت درخواست داده شده است
+				// اگر نیازی به تغییر اندازه یا کیفیت نیست، اما فرمت درخواست داده شده است یا فرمت پیش‌فرض باید اعمال شود
 				if !hasResize && !hasQuality {
-					// اگر فرمت خاصی درخواست شده باشد، تصویر را تغییر فرمت دهیم
+					// اگر فرمت خاصی درخواست شده باشد یا فرمت پیش‌فرض (webp) باید اعمال شود، تصویر را تغییر فرمت دهیم
 					if hasFormat && targetFormat == "webp" {
 						// خواندن تصویر از پاسخ
 						img, _, err := image.Decode(resp.Body)
@@ -209,15 +208,10 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 							return
 						}
 						return
-					} else {
-						// تنظیم هدرهای بهینه برای JPEG یا فرمت پیش‌فرض
+					} else { // targetFormat == "jpeg"
+						// تنظیم هدرهای بهینه برای JPEG
 						w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-						if hasFormat && targetFormat == "jpeg" {
-							w.Header().Set("Content-Type", "image/jpeg")
-						} else {
-							// فرمت پیش‌فرض
-							w.Header().Set("Content-Type", "image/jpeg")
-						}
+						w.Header().Set("Content-Type", "image/jpeg")
 						w.Header().Set("X-Content-Type-Options", "nosniff")
 						
 						// کپی مستقیم بدون بافر اضافی
@@ -267,11 +261,6 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 						http.Error(w, "Error encoding image to WebP", http.StatusInternalServerError)
 						return
 					}
-				} else if hasFormat && targetFormat == "avif" {
-					// AVIF در این پیاده‌سازی فقط با خطای مناسب پاسخ داده می‌شود
-					// چون نیاز به کتابخانه‌های اضافی دارد
-					http.Error(w, "AVIF format is not supported in this implementation", http.StatusBadRequest)
-					return
 				} else {
 					// تنظیم کیفیت تصویر برای JPEG
 					var opts *jpeg.Options
