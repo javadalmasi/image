@@ -25,7 +25,7 @@ RUN CGO_ENABLED=1 GOOS=linux go build \
 # مرحله نهایی - استفاده از alpine برای پشتیبانی از CGO
 FROM alpine:latest
 
-# نصب CA certificates با غیرفعال کردن triggers برای جلوگیری از مشکلات ایمیولیشن
+# نصب CA certificates با غیرفعال کردن triggers برای جلوگیری از مشکلات ایمیولیسن
 RUN apk add --no-cache --no-scripts ca-certificates
 
 WORKDIR /root/
@@ -37,4 +37,4 @@ COPY --from=builder /app/yt-thumbnail-proxy /yt-thumbnail-proxy
 EXPOSE 8080
 
 # اجرای برنامه
-ENTRYPOINT ["./yt-thumbnail-proxy"]
+ENTRYPOINT ["/yt-thumbnail-proxy"]
