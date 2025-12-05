@@ -161,7 +161,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 			targetFormat = "jpeg"
 			hasFormat = true
 		} else {
-			http.Error(w, "Format parameter not accepted. Only webp and jpeg are supported", http.StatusBadRequest)
+			http.Error(w, "Format parameter not accepted", http.StatusBadRequest)
 			return
 		}
 	} else {
